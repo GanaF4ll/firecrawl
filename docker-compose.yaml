@@ -12,13 +12,14 @@ x-common-service: &common-service
       hard: 65535
   networks:
     - backend
+    - traefik
   extra_hosts:
     - "host.docker.internal:host-gateway"
 
 x-common-env: &common-env
   REDIS_URL: ${REDIS_URL:-redis://redis:6379}
   REDIS_RATE_LIMIT_URL: ${REDIS_URL:-redis://redis:6379}
-  PLAYWRIGHT_MICROSERVICE_URL: ${PLAYWRIGHT_MICROSERVICE_URL:-http://playwright-service:3000/scrape}
+  PLAYWRIGHT_MICROSERVICE_URL: ${PLAYWRIGHT_MICROSERVICE_URL:-http://playwright-service:3333/scrape}
   NUQ_DATABASE_URL: postgres://postgres:postgres@nuq-postgres:5432/postgres
   USE_DB_AUTHENTICATION: ${USE_DB_AUTHENTICATION}
   OPENAI_API_KEY: ${OPENAI_API_KEY}
@@ -50,7 +51,7 @@ services:
     # image: ghcr.io/firecrawl/playwright-service:latest
     build: apps/playwright-service-ts
     environment:
-      PORT: 3000
+      PORT: 3333
       PROXY_SERVER: ${PROXY_SERVER}
       PROXY_USERNAME: ${PROXY_USERNAME}
       PROXY_PASSWORD: ${PROXY_PASSWORD}
@@ -73,6 +74,13 @@ services:
     ports:
       - "${PORT:-3002}:${INTERNAL_PORT:-3002}"
     command: node dist/src/harness.js --start-docker
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`firecrawl-api.gana-f4ll.fr`)"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.tls=true"
+      - "traefik.http.routers.api.tls.certresolver=myresolver"
+      - "traefik.http.services.firecrawl-api.loadbalancer.server.port=3002"
 
   redis:
     # NOTE: If you want to use Valkey (open source) instead of Redis (source available),
@@ -94,8 +102,10 @@ services:
     networks:
       - backend
     ports:
-      - "5432:5432"
+      - "5433:5432"
 
 networks:
   backend:
     driver: bridge
+  traefik:
+    external: true
